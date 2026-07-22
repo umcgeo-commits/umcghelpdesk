@@ -16,7 +16,7 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
-import { ArrowRight, Loader2, Mail, UserX, AlertCircle } from "lucide-react";
+import { ArrowRight, Loader2, Mail, UserX, AlertCircle, CheckCircle2 } from "lucide-react";
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router";
 
@@ -32,9 +32,11 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
   const [showOtp, setShowOtp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
   const hasRedirected = useRef(false);
 
-  // Redireciona se já estiver autenticado (useEffect + flag pra evitar loops)
+  // Redireciona se já estiver autenticado
   useEffect(() => {
     if (!authLoading && isAuthenticated && !hasRedirected.current) {
       hasRedirected.current = true;
@@ -42,48 +44,53 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
     }
   }, [authLoading, isAuthenticated, navigate, redirectAfterAuth]);
 
-  // Função auxiliar para navegar com fallback
   const goToDashboard = () => {
     hasRedirected.current = true;
-    try {
-      navigate(redirectAfterAuth, { replace: true });
-    } catch {
-      window.location.href = redirectAfterAuth;
-    }
+    try { navigate(redirectAfterAuth, { replace: true }); }
+    catch { window.location.href = redirectAfterAuth; }
   };
 
-  // Envia o código para o email
+  // ENVIA O CÓDIGO PARA O EMAIL
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
 
     setIsLoading(true);
     setError(null);
+    setSuccessMsg(null);
 
     try {
-      // Usa FormData (formato esperado pelo Email provider)
+      console.log("[Auth] Solicitando código para:", email.trim());
+
       const fd = new FormData();
       fd.set("email", email.trim());
       await signIn("email-otp", fd);
 
+      console.log("[Auth] Código enviado com sucesso!");
+      setSuccessMsg(`Código enviado para ${email.trim()}`);
       setShowOtp(true);
       setOtp("");
-      setError(null);
     } catch (err: any) {
-      console.error("Erro ao enviar código:", err);
-      // Mesmo com erro, o código pode ter sido enviado
-      setShowOtp(true);
-      setOtp("");
-      setError(null);
+      console.error("[Auth] Erro ao enviar código:", err);
+
+      // Extrai mensagem do erro
+      let msg = "";
+      try {
+        if (err?.message) msg = err.message;
+        else if (typeof err === "string") msg = err;
+        else msg = JSON.stringify(err);
+      } catch {
+        msg = "Erro desconhecido";
+      }
+
+      setError(`Falha ao enviar código: ${msg}`);
+      setShowOtp(false);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Estado para depuração
-  const [debugInfo, setDebugInfo] = useState<string | null>(null);
-
-  // Verifica o código
+  // VERIFICA O CÓDIGO
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.length !== 6) return;
@@ -93,58 +100,44 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
     setDebugInfo(null);
 
     try {
-      console.log("[Auth] Enviando código para verificação:", { email: email.trim(), code: otp, otpLength: otp.length });
+      console.log("[Auth] Verificando código:", { email: email.trim(), otp });
 
-      // Usa FormData com email + code
       const fd = new FormData();
       fd.set("email", email.trim());
       fd.set("code", otp);
       await signIn("email-otp", fd);
 
-      console.log("[Auth] SignIn concluído com sucesso!");
-
-      // Sucesso! Navega imediatamente
+      console.log("[Auth] Login bem-sucedido!");
       goToDashboard();
     } catch (err: any) {
       console.error("[Auth] Erro na verificação:", err);
 
-      // Mostra o erro completo no debug
+      // Mostra detalhes para depuração
       try {
-        const errorDetails = JSON.stringify(err, Object.getOwnPropertyNames(err), 2);
-        console.log("[Auth] Detalhes do erro:", errorDetails);
-        setDebugInfo(errorDetails);
+        const details = JSON.stringify(err, Object.getOwnPropertyNames(err), 2);
+        setDebugInfo(details);
       } catch {
         setDebugInfo(String(err));
       }
 
-      const msg = err?.message || String(err) || "";
+      let msg = "";
+      try {
+        if (err?.message) msg = err.message;
+        else if (typeof err === "string") msg = err;
+      } catch { msg = ""; }
 
-      // Verifica se mesmo com erro o usuário está autenticado
-      if (isAuthenticated) {
-        console.log("[Auth] Usuário autenticado apesar do erro, redirecionando");
-        goToDashboard();
-        return;
-      }
+      const lower = msg.toLowerCase();
 
-      if (
-        msg.toLowerCase().includes("expired") ||
-        msg.toLowerCase().includes("invalid") ||
-        msg.toLowerCase().includes("incorrect") ||
-        msg.toLowerCase().includes("not found") ||
-        msg.toLowerCase().includes("wrong")
-      ) {
-        setError("Código inválido ou expirado. Solicite um novo código.");
-      } else if (
-        msg.toLowerCase().includes("already") ||
-        msg.toLowerCase().includes("signed in") ||
-        msg.toLowerCase().includes("authenticated")
-      ) {
-        console.log("[Auth] Usuário já está logado, redirecionando");
+      if (lower.includes("expired") || lower.includes("invalid") ||
+          lower.includes("incorrect") || lower.includes("not found") ||
+          lower.includes("wrong")) {
+        setError("Código inválido ou expirado.");
+      } else if (lower.includes("already") || lower.includes("signed in") ||
+                 lower.includes("authenticated") || isAuthenticated) {
         goToDashboard();
         return;
       } else {
-        // Mostra o erro real para depuração
-        setError(msg || "Não foi possível verificar o código. Tente novamente.");
+        setError(msg || "Erro ao verificar código.");
       }
 
       setOtp("");
@@ -152,20 +145,28 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
     }
   };
 
-  // Login anônimo
+  // LOGIN ANÔNIMO
   const handleGuestLogin = async () => {
     setIsLoading(true);
     setError(null);
 
     try {
+      console.log("[Auth] Entrando como convidado...");
       await signIn("anonymous");
-      // Verifica se autenticou
+      console.log("[Auth] Login anônimo bem-sucedido!");
+
+      // Verifica se autenticou e redireciona
       if (isAuthenticated) {
         goToDashboard();
       }
-      // O useEffect vai redirecionar se autenticar
+      // O useEffect também vai redirecionar quando o estado atualizar
+      setTimeout(() => {
+        if (!hasRedirected.current) {
+          goToDashboard();
+        }
+      }, 2000);
     } catch (err: any) {
-      console.error("Erro no login anônimo:", err);
+      console.error("[Auth] Erro no login anônimo:", err);
       setError(err?.message || "Erro ao entrar como convidado");
       setIsLoading(false);
     }
@@ -175,6 +176,8 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
     setShowOtp(false);
     setOtp("");
     setError(null);
+    setSuccessMsg(null);
+    setDebugInfo(null);
   };
 
   return (
@@ -186,14 +189,9 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
               <>
                 <CardHeader className="text-center">
                   <div className="flex justify-center">
-                    <img
-                      src={logo}
-                      alt="Logo"
-                      width={64}
-                      height={64}
+                    <img src={logo} alt="Logo" width={64} height={64}
                       className="rounded-lg mb-4 mt-4 cursor-pointer"
-                      onClick={() => navigate("/")}
-                    />
+                      onClick={() => navigate("/")} />
                   </div>
                   <CardTitle className="text-xl">Entrar</CardTitle>
                   <CardDescription>
@@ -206,34 +204,25 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                     <div className="relative flex items-center gap-2">
                       <div className="relative flex-1">
                         <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          placeholder="seu@email.com"
-                          type="email"
-                          value={email}
-                          onChange={(e) => setEmail(e.target.value)}
-                          className="pl-9"
-                          disabled={isLoading}
-                          required
-                        />
+                        <Input placeholder="seu@email.com" type="email"
+                          value={email} onChange={e => setEmail(e.target.value)}
+                          className="pl-9" disabled={isLoading} required />
                       </div>
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        size="icon"
-                        disabled={isLoading || !email.trim()}
-                      >
-                        {isLoading ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <ArrowRight className="h-4 w-4" />
-                        )}
+                      <Button type="submit" variant="outline" size="icon"
+                        disabled={isLoading || !email.trim()}>
+                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" />
+                          : <ArrowRight className="h-4 w-4" />}
                       </Button>
                     </div>
 
+                    {successMsg && (
+                      <p className="mt-2 text-sm text-emerald-600 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />{successMsg}
+                      </p>
+                    )}
                     {error && (
                       <p className="mt-2 text-sm text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                        {error}
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />{error}
                       </p>
                     )}
 
@@ -249,15 +238,10 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                         </div>
                       </div>
 
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full mt-4"
-                        onClick={handleGuestLogin}
-                        disabled={isLoading}
-                      >
+                      <Button type="button" variant="outline" className="w-full mt-4"
+                        onClick={handleGuestLogin} disabled={isLoading}>
                         <UserX className="mr-2 h-4 w-4" />
-                        Continuar como Convidado
+                        Continuar sem cadastro
                       </Button>
                     </div>
                   </CardContent>
@@ -276,16 +260,11 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                 <form onSubmit={handleVerifyCode}>
                   <CardContent className="pb-4">
                     <div className="flex justify-center">
-                      <InputOTP
-                        value={otp}
-                        onChange={setOtp}
-                        maxLength={6}
-                        disabled={isLoading}
-                        autoFocus
-                      >
+                      <InputOTP value={otp} onChange={setOtp}
+                        maxLength={6} disabled={isLoading} autoFocus>
                         <InputOTPGroup>
-                          {Array.from({ length: 6 }).map((_, index) => (
-                            <InputOTPSlot key={index} index={index} />
+                          {Array.from({ length: 6 }).map((_, i) => (
+                            <InputOTPSlot key={i} index={i} />
                           ))}
                         </InputOTPGroup>
                       </InputOTP>
@@ -293,14 +272,13 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
 
                     {error && (
                       <p className="mt-2 text-sm text-red-500 text-center flex items-center justify-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                        {error}
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />{error}
                       </p>
                     )}
                     {debugInfo && (
-                      <details className="mt-3">
+                      <details className="mt-2">
                         <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground text-center">
-                          Ver detalhes do erro (depuração)
+                          Ver detalhes técnicos
                         </summary>
                         <pre className="mt-2 p-2 rounded-lg bg-muted text-[9px] text-left text-muted-foreground overflow-auto max-h-[200px] whitespace-pre-wrap break-words">
                           {debugInfo}
@@ -310,42 +288,29 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
 
                     <p className="text-sm text-muted-foreground text-center mt-4">
                       Não recebeu o código?{" "}
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="p-0 h-auto text-xs"
-                        onClick={resetForm}
-                      >
+                      <Button type="button" variant="link" className="p-0 h-auto text-xs"
+                        onClick={resetForm}>
                         Tentar novamente
+                      </Button>
+                      {" ou "}
+                      <Button type="button" variant="link" className="p-0 h-auto text-xs"
+                        onClick={handleGuestLogin} disabled={isLoading}>
+                        entrar sem email
                       </Button>
                     </p>
                   </CardContent>
 
                   <CardFooter className="flex-col gap-2">
-                    <Button
-                      type="submit"
-                      className="w-full"
-                      disabled={isLoading || otp.length !== 6}
-                    >
+                    <Button type="submit" className="w-full"
+                      disabled={isLoading || otp.length !== 6}>
                       {isLoading ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Entrando...
-                        </>
+                        <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Entrando...</>
                       ) : (
-                        <>
-                          Entrar
-                          <ArrowRight className="ml-2 h-4 w-4" />
-                        </>
+                        <>Entrar<ArrowRight className="ml-2 h-4 w-4" /></>
                       )}
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={resetForm}
-                      disabled={isLoading}
-                      className="w-full"
-                    >
+                    <Button type="button" variant="ghost" onClick={resetForm}
+                      disabled={isLoading} className="w-full">
                       Usar outro email
                     </Button>
                   </CardFooter>
@@ -355,12 +320,8 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
 
             <div className="py-4 px-6 text-xs text-center text-muted-foreground bg-muted border-t rounded-b-lg">
               Secured by{" "}
-              <a
-                href="https://freebuff.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline hover:text-primary transition-colors"
-              >
+              <a href="https://freebuff.com" target="_blank" rel="noopener noreferrer"
+                className="underline hover:text-primary transition-colors">
                 freebuff.com
               </a>
             </div>
@@ -372,9 +333,5 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
 }
 
 export default function AuthPage(props: AuthProps) {
-  return (
-    <Suspense>
-      <Auth {...props} />
-    </Suspense>
-  );
+  return <Suspense><Auth {...props} /></Suspense>;
 }
