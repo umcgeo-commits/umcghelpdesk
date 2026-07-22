@@ -28,12 +28,16 @@ import {
   HelpCircle,
   AlertTriangle,
   Phone,
+  Building2,
+  Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function CreateTicketPage() {
   const navigate = useNavigate();
   const categories = useQuery(api.ticketCategories.listCategories);
+  const departments = useQuery(api.departments.listDepartments);
+  const services = useQuery(api.services.listServices, {});
   const createTicket = useMutation(api.tickets.createTicket);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -41,6 +45,8 @@ export default function CreateTicketPage() {
     description: "",
     priority: "media",
     categoryId: "",
+    departmentId: "",
+    serviceId: "",
     whatsappNumber: "",
   });
 
@@ -58,6 +64,8 @@ export default function CreateTicketPage() {
         description: formData.description.trim(),
         priority: formData.priority as "baixa" | "media" | "alta" | "urgente",
         categoryId: formData.categoryId ? (formData.categoryId as any) : undefined,
+        departmentId: formData.departmentId ? (formData.departmentId as any) : undefined,
+        serviceId: formData.serviceId ? (formData.serviceId as any) : undefined,
         whatsappNumber: formData.whatsappNumber ? formData.whatsappNumber.replace(/\D/g, "") : undefined,
       });
       toast.success("Chamado aberto com sucesso!");
@@ -108,6 +116,62 @@ export default function CreateTicketPage() {
                   className="h-10"
                 />
               </div>
+
+              {/* Department */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5" />
+                  Departamento
+                </Label>
+                <Select
+                  value={formData.departmentId}
+                  onValueChange={(value) => setFormData({ ...formData, departmentId: value, serviceId: "" })}
+                >
+                  <SelectTrigger className="h-10">
+                    <SelectValue placeholder="Selecione um departamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {departments?.map((dept) => (
+                      <SelectItem key={dept._id} value={dept._id}>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: dept.color }} />
+                          {dept.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Service */}
+              {formData.departmentId && (
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium flex items-center gap-1.5">
+                    <Wrench className="w-3.5 h-3.5" />
+                    Serviço
+                  </Label>
+                  <Select
+                    value={formData.serviceId}
+                    onValueChange={(value) => setFormData({ ...formData, serviceId: value })}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue placeholder="Selecione um serviço" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {services
+                        ?.filter((s) => s.departmentId === formData.departmentId)
+                        .map((svc) => (
+                          <SelectItem key={svc._id} value={svc._id}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: svc.color || svc.department?.color }} />
+                              {svc.name}
+                            </div>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Category */}
               <div className="space-y-2">

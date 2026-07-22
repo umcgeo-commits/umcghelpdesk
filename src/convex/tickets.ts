@@ -86,12 +86,12 @@ export const listMyTickets = query({
 
     return Promise.all(
       tickets.map(async (ticket) => {
-        const category = ticket.categoryId
-          ? await ctx.db.get(ticket.categoryId)
-          : null;
-        const assignedTo = ticket.assignedTo
-          ? await ctx.db.get(ticket.assignedTo)
-          : null;
+        const [category, department, service, assignee] = await Promise.all([
+          ticket.categoryId ? ctx.db.get(ticket.categoryId) : null,
+          ticket.departmentId ? ctx.db.get(ticket.departmentId) : null,
+          ticket.serviceId ? ctx.db.get(ticket.serviceId) : null,
+          ticket.assignedTo ? ctx.db.get(ticket.assignedTo) : null,
+        ]);
         const messageCount = (
           await ctx.db
             .query("ticketMessages")
@@ -102,8 +102,10 @@ export const listMyTickets = query({
         return {
           ...ticket,
           category,
-          assignedTo: assignedTo
-            ? { name: assignedTo.name, image: assignedTo.image }
+          department: department ? { _id: department._id, name: department.name, color: department.color } : null,
+          service: service ? { _id: service._id, name: service.name } : null,
+          assignedTo: assignee
+            ? { name: assignee.name, image: assignee.image }
             : null,
           messageCount,
         };
@@ -153,8 +155,10 @@ export const listAllTickets = query({
 
     return Promise.all(
       tickets.map(async (ticket) => {
-        const [category, creator, assignee] = await Promise.all([
+        const [category, department, service, creator, assignee] = await Promise.all([
           ticket.categoryId ? ctx.db.get(ticket.categoryId) : null,
+          ticket.departmentId ? ctx.db.get(ticket.departmentId) : null,
+          ticket.serviceId ? ctx.db.get(ticket.serviceId) : null,
           ctx.db.get(ticket.createdBy),
           ticket.assignedTo ? ctx.db.get(ticket.assignedTo) : null,
         ]);
@@ -168,6 +172,8 @@ export const listAllTickets = query({
         return {
           ...ticket,
           category,
+          department: department ? { _id: department._id, name: department.name, color: department.color } : null,
+          service: service ? { _id: service._id, name: service.name } : null,
           creator: creator
             ? { name: creator.name, image: creator.image, email: creator.email }
             : null,
@@ -193,8 +199,10 @@ export const getTicket = query({
 
     if (ticket.createdBy !== user._id && user.role !== "admin") return null;
 
-    const [category, creator, assignee] = await Promise.all([
+    const [category, department, service, creator, assignee] = await Promise.all([
       ticket.categoryId ? ctx.db.get(ticket.categoryId) : null,
+      ticket.departmentId ? ctx.db.get(ticket.departmentId) : null,
+      ticket.serviceId ? ctx.db.get(ticket.serviceId) : null,
       ctx.db.get(ticket.createdBy),
       ticket.assignedTo ? ctx.db.get(ticket.assignedTo) : null,
     ]);
@@ -202,6 +210,8 @@ export const getTicket = query({
     return {
       ...ticket,
       category,
+      department: department ? { _id: department._id, name: department.name, color: department.color } : null,
+      service: service ? { _id: service._id, name: service.name } : null,
       creator: creator
         ? { name: creator.name, image: creator.image, email: creator.email }
         : null,
@@ -225,6 +235,7 @@ export const getTicketStats = query({
 
     const tickets = await ctx.db.query("tickets").collect();
     const usersCount = (await ctx.db.query("users").collect()).length;
+    const depts = await ctx.db.query("departments").collect();
 
     const total = tickets.length;
     const abertos = tickets.filter((t) => t.status === "aberto").length;
@@ -243,6 +254,7 @@ export const getTicketStats = query({
       fechados,
       urgentes,
       totalUsuarios: usersCount,
+      totalDepartamentos: depts.length,
     };
   },
 });
@@ -259,6 +271,8 @@ export const createTicket = mutation({
       v.literal("urgente")
     ),
     categoryId: v.optional(v.id("ticketCategories")),
+    departmentId: v.optional(v.id("departments")),
+    serviceId: v.optional(v.id("services")),
     whatsappNumber: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -271,6 +285,8 @@ export const createTicket = mutation({
       status: "aberto",
       priority: args.priority,
       categoryId: args.categoryId,
+      departmentId: args.departmentId,
+      serviceId: args.serviceId,
       createdBy: userId,
       whatsappNumber: args.whatsappNumber,
     });
@@ -284,6 +300,98 @@ export const createTicket = mutation({
     });
 
     return ticketId;
+  },
+});
+
+// Query: Estatísticas detalhadas para relatórios
+export const getReportStats = query({
+  args: {
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    if (!user || user.role !== "admin") return null;
+
+    let tickets = await ctx.db.query("tickets").collect();
+
+    if (args.startDate) {
+      tickets = tickets.filter((t) => t._creationTime >= args.startDate!);
+    }
+    if (args.endDate) {
+      tickets = tickets.filter((t) => t._creationTime <= args.endDate!);
+    }
+
+    const total = tickets.length;
+
+    // Por status
+    const byStatus = {
+      aberto: tickets.filter((t) => t.status === "aberto").length,
+      em_andamento: tickets.filter((t) => t.status === "em_andamento").length,
+      aguardando_cliente: tickets.filter((t) => t.status === "aguardando_cliente").length,
+      resolvido: tickets.filter((t) => t.status === "resolvido").length,
+      fechado: tickets.filter((t) => t.status === "fechado").length,
+    };
+
+    // Por prioridade
+    const byPriority = {
+      baixa: tickets.filter((t) => t.priority === "baixa").length,
+      media: tickets.filter((t) => t.priority === "media").length,
+      alta: tickets.filter((t) => t.priority === "alta").length,
+      urgente: tickets.filter((t) => t.priority === "urgente").length,
+    };
+
+    // Por departamento
+    const depts = await ctx.db.query("departments").collect();
+    const byDepartment = await Promise.all(
+      depts.map(async (d) => ({
+        name: d.name,
+        color: d.color,
+        count: tickets.filter((t) => t.departmentId === d._id).length,
+      }))
+    );
+
+    // Por agente (assignee)
+    const agents = await ctx.db.query("users").collect();
+    const byAgent = await Promise.all(
+      agents
+        .filter((a) => a.role === "admin" || a.role === "member")
+        .map(async (a) => {
+          const resolved = tickets.filter((t) => t.resolvedBy === a._id).length;
+          const assigned = tickets.filter((t) => t.assignedTo === a._id).length;
+          return {
+            name: a.name || "Agente",
+            email: a.email,
+            assigned,
+            resolved,
+          };
+        })
+    );
+
+    // Por mês (últimos 6 meses)
+    const now = Date.now();
+    const byMonth: { month: string; total: number; resolvidos: number }[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - i);
+      const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).getTime();
+      const monthTickets = tickets.filter((t) => t._creationTime >= monthStart && t._creationTime <= monthEnd);
+      byMonth.push({
+        month: d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" }),
+        total: monthTickets.length,
+        resolvidos: monthTickets.filter((t) => t.status === "resolvido" || t.status === "fechado").length,
+      });
+    }
+
+    return {
+      total,
+      byStatus,
+      byPriority,
+      byDepartment: byDepartment.filter((d) => d.count > 0),
+      byAgent: byAgent.filter((a) => a.assigned > 0 || a.resolved > 0),
+      byMonth,
+    };
   },
 });
 
@@ -324,6 +432,7 @@ export const updateTicketStatus = mutation({
 
     if (args.newStatus === "resolvido") {
       updateData.resolvedAt = Date.now();
+      updateData.resolvedBy = user._id;
     }
     if (args.newStatus === "fechado") {
       updateData.closedAt = Date.now();

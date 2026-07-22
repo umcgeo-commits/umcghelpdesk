@@ -13,6 +13,10 @@ import {
   ShieldCheck,
   ChevronDown,
   Layers,
+  Building2,
+  Wrench,
+  BarChart3,
+  Columns3,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState, useEffect } from "react";
@@ -55,7 +59,11 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   const adminNavItems = [
     { href: "/admin", label: "Painel Admin", icon: ShieldCheck },
+    { href: "/admin/kanban", label: "Kanban", icon: Columns3 },
     { href: "/admin/tickets", label: "Todos Chamados", icon: Ticket },
+    { href: "/admin/reports", label: "Relatórios", icon: BarChart3 },
+    { href: "/admin/departments", label: "Departamentos", icon: Building2 },
+    { href: "/admin/services", label: "Serviços", icon: Wrench },
     { href: "/admin/categories", label: "Categorias", icon: Layers },
   ];
 
@@ -192,6 +200,10 @@ export function AppLayout({ children }: AppLayoutProps) {
                 {location.pathname.startsWith("/tickets/") && !location.pathname.includes("/new") && "Detalhes do Chamado"}
                 {isActive("/admin") && "Painel Administrativo"}
                 {isActive("/admin/tickets") && "Gerenciar Chamados"}
+                {isActive("/admin/kanban") && "Kanban"}
+                {isActive("/admin/reports") && "Relatórios"}
+                {isActive("/admin/departments") && "Departamentos"}
+                {isActive("/admin/services") && "Serviços"}
               </h1>
             </div>
             <div className="relative">

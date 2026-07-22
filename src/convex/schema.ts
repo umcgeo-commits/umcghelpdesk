@@ -32,6 +32,26 @@ const schema = defineSchema(
       phone: v.optional(v.string()), // telefone do usuário
     }).index("email", ["email"]),
 
+    // Departamentos
+    departments: defineTable({
+      name: v.string(),
+      description: v.optional(v.string()),
+      color: v.string(),
+      icon: v.optional(v.string()),
+      order: v.optional(v.number()),
+    }).index("by_name", ["name"]),
+
+    // Serviços
+    services: defineTable({
+      name: v.string(),
+      description: v.optional(v.string()),
+      departmentId: v.id("departments"),
+      color: v.optional(v.string()),
+      sla_hours: v.optional(v.number()),
+    })
+      .index("by_department", ["departmentId"])
+      .index("by_name", ["name"]),
+
     // Categorias de tickets
     ticketCategories: defineTable({
       name: v.string(),
@@ -39,6 +59,8 @@ const schema = defineSchema(
       color: v.string(),
       icon: v.optional(v.string()),
       order: v.optional(v.number()),
+      departmentId: v.optional(v.id("departments")),
+      serviceId: v.optional(v.id("services")),
     }).index("by_name", ["name"]),
 
     // Tickets/chamados
@@ -59,8 +81,11 @@ const schema = defineSchema(
         v.literal("urgente"),
       ),
       categoryId: v.optional(v.id("ticketCategories")),
+      departmentId: v.optional(v.id("departments")),
+      serviceId: v.optional(v.id("services")),
       createdBy: v.id("users"),
       assignedTo: v.optional(v.id("users")),
+      resolvedBy: v.optional(v.id("users")),
       whatsappNumber: v.optional(v.string()),
       whatsappInstance: v.optional(v.string()),
       closedAt: v.optional(v.number()),
@@ -69,7 +94,9 @@ const schema = defineSchema(
       .index("by_createdBy", ["createdBy"])
       .index("by_assignedTo", ["assignedTo"])
       .index("by_status", ["status"])
-      .index("by_priority", ["priority"]),
+      .index("by_priority", ["priority"])
+      .index("by_department", ["departmentId"])
+      .index("by_service", ["serviceId"]),
 
     // Mensagens dos tickets
     ticketMessages: defineTable({

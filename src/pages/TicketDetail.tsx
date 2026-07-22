@@ -33,6 +33,8 @@ type TicketWithRelations = {
   categoryId?: Id<"ticketCategories">;
   createdBy: Id<"users">;
   assignedTo?: { name?: string; image?: string; email?: string } | null;
+  department?: { _id: Id<"departments">; name: string; color: string } | null;
+  service?: { _id: Id<"services">; name: string } | null;
   whatsappNumber?: string;
   whatsappInstance?: string;
   closedAt?: number;
@@ -58,7 +60,21 @@ export default function TicketDetailPage() {
   const updateStatus = useMutation(api.tickets.updateTicketStatus);
   const [newMessage, setNewMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [prevStatus, setPrevStatus] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Notificação push em tempo real quando o status mudar
+  useEffect(() => {
+    if (ticket && prevStatus && prevStatus !== ticket.status) {
+      toast.success(
+        `Status atualizado: "${STATUS_LABELS[prevStatus]}" → "${STATUS_LABELS[ticket.status]}"`,
+        { duration: 4000 }
+      );
+    }
+    if (ticket) {
+      setPrevStatus(ticket.status);
+    }
+  }, [ticket?.status]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
