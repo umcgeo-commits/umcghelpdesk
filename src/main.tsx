@@ -18,6 +18,7 @@ const TicketDetailPage = lazy(() => import("./pages/TicketDetail.tsx"));
 const AdminDashboardPage = lazy(() => import("./pages/AdminDashboard.tsx"));
 const AdminTicketsPage = lazy(() => import("./pages/AdminTickets.tsx"));
 const AdminTicketDetailPage = lazy(() => import("./pages/AdminTicketDetail.tsx"));
+const AdminCategoriesPage = lazy(() => import("./pages/AdminCategories.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -131,6 +132,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/admin" element={<AdminDashboardPage />} />
               <Route path="/admin/tickets" element={<AdminTicketsPage />} />
               <Route path="/admin/tickets/:ticketId" element={<AdminTicketDetailPage />} />
+              <Route path="/admin/categories" element={<AdminCategoriesPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

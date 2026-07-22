@@ -12,6 +12,7 @@ import {
   MessageSquare,
   ShieldCheck,
   ChevronDown,
+  Layers,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useState, useEffect } from "react";
@@ -55,6 +56,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   const adminNavItems = [
     { href: "/admin", label: "Painel Admin", icon: ShieldCheck },
     { href: "/admin/tickets", label: "Todos Chamados", icon: Ticket },
+    { href: "/admin/categories", label: "Categorias", icon: Layers },
   ];
 
   const isActive = (path: string) => location.pathname === path;
