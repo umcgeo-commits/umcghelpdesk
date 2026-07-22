@@ -16,94 +16,84 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
-import { ArrowRight, Loader2, Mail, UserX, CheckCircle2 } from "lucide-react";
-import { Suspense, useEffect, useState, useCallback } from "react";
+import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { Suspense, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router";
 
 interface AuthProps {
   redirectAfterAuth?: string;
 }
 
-function Auth({ redirectAfterAuth }: AuthProps = {}) {
+function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
   const { isLoading: authLoading, isAuthenticated, signIn } = useAuth();
   const navigate = useNavigate();
-  const [step, setStep] = useState<"signIn" | { email: string }>("signIn");
+  const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
-  const [emailInput, setEmailInput] = useState("");
+  const [showOtp, setShowOtp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const otpFormRef = useRef<HTMLFormElement>(null);
 
-  // Redireciona se já estiver autenticado
+  // Redireciona após login bem-sucedido
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
-      const redirect = redirectAfterAuth || "/";
-      navigate(redirect, { replace: true });
+      navigate(redirectAfterAuth, { replace: true });
     }
   }, [authLoading, isAuthenticated, navigate, redirectAfterAuth]);
 
-  const handleEmailSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  // Envia o código OTP para o email
+  const handleSendCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return;
+
     setIsLoading(true);
     setError(null);
 
     try {
-      const fd = new FormData();
-      fd.set("email", emailInput);
-      await signIn("email-otp", fd);
-      setStep({ email: emailInput });
-      setSuccessMsg(`Código enviado para ${emailInput}`);
-    } catch (error) {
-      console.error("Erro ao enviar código:", error);
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Falha ao enviar código de verificação. Tente novamente.",
-      );
+      await signIn("email-otp", { email: email.trim() });
+      setShowOtp(true);
+      setOtp("");
+    } catch (err: any) {
+      console.error("Erro ao enviar código:", err);
+      setError(err?.message || "Falha ao enviar código. Tente novamente.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleOtpSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  // Verifica o código OTP
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (otp.length !== 6) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const email = typeof step === "object" ? step.email : emailInput;
+      await signIn("email-otp", { email: email.trim(), code: otp });
 
-      const fd = new FormData();
-      fd.set("email", email);
-      fd.set("code", otp);
+      // Se o signIn não lançou erro, o login foi bem-sucedido
+      // O useEffect acima vai redirecionar
+    } catch (err: any) {
+      console.error("Erro na verificação:", err);
 
-      await signIn("email-otp", fd);
-
-      // Se chegou aqui, o login foi bem-sucedido
-      const redirect = redirectAfterAuth || "/dashboard";
-      navigate(redirect, { replace: true });
-    } catch (error) {
-      console.error("Erro na verificação do código:", error);
-
-      const errorMessage =
-        error instanceof Error ? error.message : "";
-
+      const msg = err?.message || "";
       if (
-        errorMessage.toLowerCase().includes("expired") ||
-        errorMessage.toLowerCase().includes("invalid") ||
-        errorMessage.toLowerCase().includes("incorrect") ||
-        errorMessage.toLowerCase().includes("not found")
+        msg.toLowerCase().includes("expired") ||
+        msg.toLowerCase().includes("invalid") ||
+        msg.toLowerCase().includes("incorrect") ||
+        msg.toLowerCase().includes("not found")
       ) {
         setError("Código inválido ou expirado. Solicite um novo código.");
-      } else if (errorMessage.toLowerCase().includes("already")) {
-        // Pode estar logado mesmo com erro
-        const redirect = redirectAfterAuth || "/dashboard";
-        navigate(redirect, { replace: true });
+      } else if (
+        msg.toLowerCase().includes("already") ||
+        msg.toLowerCase().includes("signed in")
+      ) {
+        // Já está logado
+        navigate(redirectAfterAuth, { replace: true });
         return;
       } else {
-        setError("Erro ao verificar código. Tente novamente.");
+        setError(`Erro: ${msg || "Código inválido. Tente novamente."}`);
       }
 
       setOtp("");
@@ -111,22 +101,10 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
     }
   };
 
-  const handleGuestLogin = async () => {
-    setIsLoading(true);
+  const resetForm = () => {
+    setShowOtp(false);
+    setOtp("");
     setError(null);
-    try {
-      await signIn("anonymous");
-      const redirect = redirectAfterAuth || "/dashboard";
-      navigate(redirect, { replace: true });
-    } catch (error) {
-      console.error("Erro no login anônimo:", error);
-      setError(
-        `Falha ao entrar como convidado: ${
-          error instanceof Error ? error.message : "Erro desconhecido"
-        }`,
-      );
-      setIsLoading(false);
-    }
   };
 
   return (
@@ -134,8 +112,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
       <div className="flex-1 flex items-center justify-center">
         <div className="flex items-center justify-center h-full flex-col">
           <Card className="min-w-[350px] pb-0 border shadow-sm">
-            {/* Step 1: Email Input */}
-            {step === "signIn" ? (
+            {!showOtp ? (
               <>
                 <CardHeader className="text-center">
                   <div className="flex justify-center">
@@ -154,7 +131,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </CardDescription>
                 </CardHeader>
 
-                <form onSubmit={handleEmailSubmit}>
+                <form onSubmit={handleSendCode}>
                   <CardContent>
                     <div className="relative flex items-center gap-2">
                       <div className="relative flex-1">
@@ -162,8 +139,8 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         <Input
                           placeholder="seu@email.com"
                           type="email"
-                          value={emailInput}
-                          onChange={(e) => setEmailInput(e.target.value)}
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
                           className="pl-9"
                           disabled={isLoading}
                           required
@@ -173,7 +150,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         type="submit"
                         variant="outline"
                         size="icon"
-                        disabled={isLoading || !emailInput.trim()}
+                        disabled={isLoading || !email.trim()}
                       >
                         {isLoading ? (
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -183,12 +160,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                       </Button>
                     </div>
 
-                    {successMsg && (
-                      <p className="mt-2 text-sm text-emerald-600 flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        {successMsg}
-                      </p>
-                    )}
                     {error && (
                       <p className="mt-2 text-sm text-red-500">{error}</p>
                     )}
@@ -209,7 +180,16 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         type="button"
                         variant="outline"
                         className="w-full mt-4"
-                        onClick={handleGuestLogin}
+                        onClick={async () => {
+                          setIsLoading(true);
+                          setError(null);
+                          try {
+                            await signIn("anonymous");
+                          } catch (err: any) {
+                            setError(err?.message || "Erro ao entrar como convidado");
+                            setIsLoading(false);
+                          }
+                        }}
                         disabled={isLoading}
                       >
                         <UserX className="mr-2 h-4 w-4" />
@@ -220,19 +200,16 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                 </form>
               </>
             ) : (
-              /* Step 2: OTP Verification */
               <>
                 <CardHeader className="text-center mt-4">
                   <CardTitle>Verificar Código</CardTitle>
                   <CardDescription>
                     Enviamos um código de 6 dígitos para{" "}
-                    <span className="font-medium text-foreground">
-                      {typeof step === "object" ? step.email : ""}
-                    </span>
+                    <span className="font-medium text-foreground">{email}</span>
                   </CardDescription>
                 </CardHeader>
 
-                <form id="otp-form" onSubmit={handleOtpSubmit}>
+                <form ref={otpFormRef} onSubmit={handleVerifyCode}>
                   <CardContent className="pb-4">
                     <div className="flex justify-center">
                       <InputOTP
@@ -241,10 +218,6 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         maxLength={6}
                         disabled={isLoading}
                         autoFocus
-                        onComplete={() => {
-                          const form = document.getElementById("otp-form") as HTMLFormElement;
-                          if (form) form.requestSubmit();
-                        }}
                       >
                         <InputOTPGroup>
                           {Array.from({ length: 6 }).map((_, index) => (
@@ -266,23 +239,19 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         type="button"
                         variant="link"
                         className="p-0 h-auto text-xs"
-                        onClick={() => {
-                          setStep("signIn");
-                          setOtp("");
-                          setError(null);
-                          setSuccessMsg(null);
-                        }}
+                        onClick={resetForm}
                       >
                         Tentar novamente
                       </Button>
                     </p>
                   </CardContent>
 
-                  <CardFooter className="flex-col gap-2">                      <Button
-                        type="submit"
-                        className="w-full"
-                        disabled={isLoading || otp.length !== 6}
-                      >
+                  <CardFooter className="flex-col gap-2">
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      disabled={isLoading || otp.length !== 6}
+                    >
                       {isLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -298,12 +267,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     <Button
                       type="button"
                       variant="ghost"
-                      onClick={() => {
-                        setStep("signIn");
-                        setOtp("");
-                        setError(null);
-                        setSuccessMsg(null);
-                      }}
+                      onClick={resetForm}
                       disabled={isLoading}
                       className="w-full"
                     >
