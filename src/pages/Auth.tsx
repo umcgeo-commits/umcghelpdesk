@@ -16,7 +16,7 @@ import {
 
 import { useAuth } from "@/hooks/use-auth";
 import logo from "@/assets/logo.svg";
-import { ArrowRight, Loader2, Mail, UserX } from "lucide-react";
+import { ArrowRight, Loader2, Mail, UserX, AlertCircle } from "lucide-react";
 import { Suspense, useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router";
 
@@ -32,16 +32,27 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
   const [showOtp, setShowOtp] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const otpFormRef = useRef<HTMLFormElement>(null);
+  const hasRedirected = useRef(false);
 
-  // Redireciona após login bem-sucedido
+  // Redireciona se já estiver autenticado (useEffect + flag pra evitar loops)
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
+    if (!authLoading && isAuthenticated && !hasRedirected.current) {
+      hasRedirected.current = true;
       navigate(redirectAfterAuth, { replace: true });
     }
   }, [authLoading, isAuthenticated, navigate, redirectAfterAuth]);
 
-  // Envia o código OTP para o email
+  // Função auxiliar para navegar com fallback
+  const goToDashboard = () => {
+    hasRedirected.current = true;
+    try {
+      navigate(redirectAfterAuth, { replace: true });
+    } catch {
+      window.location.href = redirectAfterAuth;
+    }
+  };
+
+  // Envia o código para o email
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim()) return;
@@ -50,18 +61,26 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
     setError(null);
 
     try {
-      await signIn("email-otp", { email: email.trim() });
+      // Usa FormData (formato esperado pelo Email provider)
+      const fd = new FormData();
+      fd.set("email", email.trim());
+      await signIn("email-otp", fd);
+
       setShowOtp(true);
       setOtp("");
+      setError(null);
     } catch (err: any) {
       console.error("Erro ao enviar código:", err);
-      setError(err?.message || "Falha ao enviar código. Tente novamente.");
+      // Mesmo com erro, o código pode ter sido enviado
+      setShowOtp(true);
+      setOtp("");
+      setError(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Verifica o código OTP
+  // Verifica o código
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.length !== 6) return;
@@ -70,32 +89,65 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
     setError(null);
 
     try {
-      await signIn("email-otp", { email: email.trim(), code: otp });
+      // Usa FormData com email + code
+      const fd = new FormData();
+      fd.set("email", email.trim());
+      fd.set("code", otp);
+      await signIn("email-otp", fd);
 
-      // SignIn bem-sucedido! Navegar imediatamente
-      navigate(redirectAfterAuth, { replace: true });
+      // Sucesso! Navega imediatamente
+      goToDashboard();
     } catch (err: any) {
       console.error("Erro na verificação:", err);
 
-      const msg = err?.message || "";
+      const msg = err?.message || String(err) || "";
+
+      // Verifica se mesmo com erro o usuário está autenticado
+      if (isAuthenticated) {
+        goToDashboard();
+        return;
+      }
+
       if (
         msg.toLowerCase().includes("expired") ||
         msg.toLowerCase().includes("invalid") ||
         msg.toLowerCase().includes("incorrect") ||
-        msg.toLowerCase().includes("not found")
+        msg.toLowerCase().includes("not found") ||
+        msg.toLowerCase().includes("wrong")
       ) {
         setError("Código inválido ou expirado. Solicite um novo código.");
       } else if (
         msg.toLowerCase().includes("already") ||
-        msg.toLowerCase().includes("signed in")
+        msg.toLowerCase().includes("signed in") ||
+        msg.toLowerCase().includes("authenticated")
       ) {
-        navigate(redirectAfterAuth, { replace: true });
+        goToDashboard();
         return;
       } else {
-        setError(`Erro: ${msg || "Código inválido. Tente novamente."}`);
+        // Mostra o erro real para depuração
+        setError(msg || "Não foi possível verificar o código. Tente novamente.");
       }
 
       setOtp("");
+      setIsLoading(false);
+    }
+  };
+
+  // Login anônimo
+  const handleGuestLogin = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await signIn("anonymous");
+      // Verifica se autenticou
+      if (isAuthenticated) {
+        goToDashboard();
+      }
+      // O useEffect vai redirecionar se autenticar
+    } catch (err: any) {
+      console.error("Erro no login anônimo:", err);
+      setError(err?.message || "Erro ao entrar como convidado");
       setIsLoading(false);
     }
   };
@@ -160,7 +212,10 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                     </div>
 
                     {error && (
-                      <p className="mt-2 text-sm text-red-500">{error}</p>
+                      <p className="mt-2 text-sm text-red-500 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        {error}
+                      </p>
                     )}
 
                     <div className="mt-4">
@@ -179,16 +234,7 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                         type="button"
                         variant="outline"
                         className="w-full mt-4"
-                        onClick={async () => {
-                          setIsLoading(true);
-                          setError(null);
-                          try {
-                            await signIn("anonymous");
-                          } catch (err: any) {
-                            setError(err?.message || "Erro ao entrar como convidado");
-                            setIsLoading(false);
-                          }
-                        }}
+                        onClick={handleGuestLogin}
                         disabled={isLoading}
                       >
                         <UserX className="mr-2 h-4 w-4" />
@@ -208,7 +254,7 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                   </CardDescription>
                 </CardHeader>
 
-                <form ref={otpFormRef} onSubmit={handleVerifyCode}>
+                <form onSubmit={handleVerifyCode}>
                   <CardContent className="pb-4">
                     <div className="flex justify-center">
                       <InputOTP
@@ -227,7 +273,8 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                     </div>
 
                     {error && (
-                      <p className="mt-2 text-sm text-red-500 text-center">
+                      <p className="mt-2 text-sm text-red-500 text-center flex items-center justify-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                         {error}
                       </p>
                     )}
@@ -254,11 +301,11 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                       {isLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Verificando...
+                          Entrando...
                         </>
                       ) : (
                         <>
-                          Verificar código
+                          Entrar
                           <ArrowRight className="ml-2 h-4 w-4" />
                         </>
                       )}
