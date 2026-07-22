@@ -232,7 +232,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                   </CardDescription>
                 </CardHeader>
 
-                <form onSubmit={handleOtpSubmit}>
+                <form id="otp-form" onSubmit={handleOtpSubmit}>
                   <CardContent className="pb-4">
                     <div className="flex justify-center">
                       <InputOTP
@@ -242,8 +242,7 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                         disabled={isLoading}
                         autoFocus
                         onComplete={() => {
-                          // Submete automaticamente quando os 6 dígitos forem preenchidos
-                          const form = document.querySelector("#otp-form") as HTMLFormElement;
+                          const form = document.getElementById("otp-form") as HTMLFormElement;
                           if (form) form.requestSubmit();
                         }}
                       >
@@ -279,13 +278,11 @@ function Auth({ redirectAfterAuth }: AuthProps = {}) {
                     </p>
                   </CardContent>
 
-                  <CardFooter className="flex-col gap-2">
-                    <Button
-                      type="submit"
-                      id="otp-form"
-                      className="w-full"
-                      disabled={isLoading || otp.length !== 6}
-                    >
+                  <CardFooter className="flex-col gap-2">                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={isLoading || otp.length !== 6}
+                      >
                       {isLoading ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
