@@ -12,6 +12,12 @@ import "./index.css";
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
+const DashboardPage = lazy(() => import("./pages/Dashboard.tsx"));
+const CreateTicketPage = lazy(() => import("./pages/CreateTicket.tsx"));
+const TicketDetailPage = lazy(() => import("./pages/TicketDetail.tsx"));
+const AdminDashboardPage = lazy(() => import("./pages/AdminDashboard.tsx"));
+const AdminTicketsPage = lazy(() => import("./pages/AdminTickets.tsx"));
+const AdminTicketDetailPage = lazy(() => import("./pages/AdminTicketDetail.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -118,7 +124,13 @@ createRoot(document.getElementById("root")!).render(
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               <Route path="/" element={<Landing />} />
-              <Route path="/auth" element={<AuthPage redirectAfterAuth="/" />} /> {/* TODO: change redirect after auth to correct page */}
+              <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/tickets/new" element={<CreateTicketPage />} />
+              <Route path="/tickets/:ticketId" element={<TicketDetailPage />} />
+              <Route path="/admin" element={<AdminDashboardPage />} />
+              <Route path="/admin/tickets" element={<AdminTicketsPage />} />
+              <Route path="/admin/tickets/:ticketId" element={<AdminTicketDetailPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
