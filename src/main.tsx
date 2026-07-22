@@ -23,6 +23,7 @@ const AdminDepartmentsPage = lazy(() => import("./pages/AdminDepartments.tsx"));
 const AdminServicesPage = lazy(() => import("./pages/AdminServices.tsx"));
 const AdminReportsPage = lazy(() => import("./pages/AdminReports.tsx"));
 const AdminKanbanPage = lazy(() => import("./pages/AdminKanban.tsx"));
+const SeedPage = lazy(() => import("./pages/SeedPage.tsx"));
 
 // Simple loading fallback for route transitions
 function RouteLoading() {
@@ -141,6 +142,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/admin/services" element={<AdminServicesPage />} />
               <Route path="/admin/reports" element={<AdminReportsPage />} />
               <Route path="/admin/kanban" element={<AdminKanbanPage />} />
+              <Route path="/seed" element={<SeedPage />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
