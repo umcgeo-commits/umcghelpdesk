@@ -80,6 +80,9 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
     }
   };
 
+  // Estado para depuração
+  const [debugInfo, setDebugInfo] = useState<string | null>(null);
+
   // Verifica o código
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,23 +90,38 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
 
     setIsLoading(true);
     setError(null);
+    setDebugInfo(null);
 
     try {
+      console.log("[Auth] Enviando código para verificação:", { email: email.trim(), code: otp, otpLength: otp.length });
+
       // Usa FormData com email + code
       const fd = new FormData();
       fd.set("email", email.trim());
       fd.set("code", otp);
       await signIn("email-otp", fd);
 
+      console.log("[Auth] SignIn concluído com sucesso!");
+
       // Sucesso! Navega imediatamente
       goToDashboard();
     } catch (err: any) {
-      console.error("Erro na verificação:", err);
+      console.error("[Auth] Erro na verificação:", err);
+
+      // Mostra o erro completo no debug
+      try {
+        const errorDetails = JSON.stringify(err, Object.getOwnPropertyNames(err), 2);
+        console.log("[Auth] Detalhes do erro:", errorDetails);
+        setDebugInfo(errorDetails);
+      } catch {
+        setDebugInfo(String(err));
+      }
 
       const msg = err?.message || String(err) || "";
 
       // Verifica se mesmo com erro o usuário está autenticado
       if (isAuthenticated) {
+        console.log("[Auth] Usuário autenticado apesar do erro, redirecionando");
         goToDashboard();
         return;
       }
@@ -121,6 +139,7 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
         msg.toLowerCase().includes("signed in") ||
         msg.toLowerCase().includes("authenticated")
       ) {
+        console.log("[Auth] Usuário já está logado, redirecionando");
         goToDashboard();
         return;
       } else {
@@ -277,6 +296,16 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
                         <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                         {error}
                       </p>
+                    )}
+                    {debugInfo && (
+                      <details className="mt-3">
+                        <summary className="text-[10px] text-muted-foreground cursor-pointer hover:text-foreground text-center">
+                          Ver detalhes do erro (depuração)
+                        </summary>
+                        <pre className="mt-2 p-2 rounded-lg bg-muted text-[9px] text-left text-muted-foreground overflow-auto max-h-[200px] whitespace-pre-wrap break-words">
+                          {debugInfo}
+                        </pre>
+                      </details>
                     )}
 
                     <p className="text-sm text-muted-foreground text-center mt-4">
