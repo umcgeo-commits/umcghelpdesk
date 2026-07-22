@@ -72,8 +72,8 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
     try {
       await signIn("email-otp", { email: email.trim(), code: otp });
 
-      // Se o signIn não lançou erro, o login foi bem-sucedido
-      // O useEffect acima vai redirecionar
+      // SignIn bem-sucedido! Navegar imediatamente
+      navigate(redirectAfterAuth, { replace: true });
     } catch (err: any) {
       console.error("Erro na verificação:", err);
 
@@ -89,7 +89,6 @@ function Auth({ redirectAfterAuth = "/dashboard" }: AuthProps) {
         msg.toLowerCase().includes("already") ||
         msg.toLowerCase().includes("signed in")
       ) {
-        // Já está logado
         navigate(redirectAfterAuth, { replace: true });
         return;
       } else {
